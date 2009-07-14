@@ -22,6 +22,7 @@
 #include "log.h"
 #include "okclient.h"
 #include "droproot.h"
+#include "maxclient.h"
 
 static int packetquery(char *buf,unsigned int len,char **q,char qtype[2],char qclass[2],char id[2])
 {
@@ -54,7 +55,6 @@ uint64 numqueries = 0;
 
 static int udp53;
 
-#define MAXUDP 200
 static struct udpclient {
   struct query q;
   struct taia start;
@@ -131,7 +131,6 @@ void u_new(void)
 
 static int tcp53;
 
-#define MAXTCP 20
 struct tcpclient {
   struct query q;
   struct taia start;

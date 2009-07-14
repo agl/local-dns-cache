@@ -318,11 +318,11 @@ stralloc.h iopause.h taia.h tai.h uint64.h taia.h
 	./compile dns_txt.c
 
 dnscache: \
-load dnscache.o droproot.o okclient.o log.o cache.o query.o \
+load dnscache.o droproot.o okclient.o log.o cache.o query.o qmerge.o \
 response.o dd.o roots.o iopause.o prot.o dns.a env.a alloc.a buffer.a \
 libtai.a unix.a byte.a socket.lib
 	./load dnscache droproot.o okclient.o log.o cache.o \
-	query.o response.o dd.o roots.o iopause.o prot.o dns.a \
+	query.o qmerge.o response.o dd.o roots.o iopause.o prot.o dns.a \
 	env.a alloc.a buffer.a libtai.a unix.a byte.a  `cat \
 	socket.lib`
 
@@ -343,7 +343,7 @@ compile dnscache.c env.h exit.h scan.h strerr.h error.h ip4.h \
 uint16.h uint64.h socket.h uint16.h dns.h stralloc.h gen_alloc.h \
 iopause.h taia.h tai.h uint64.h taia.h taia.h byte.h roots.h fmt.h \
 iopause.h query.h dns.h uint32.h alloc.h response.h uint32.h cache.h \
-uint32.h uint64.h ndelay.h log.h uint64.h okclient.h droproot.h
+uint32.h uint64.h ndelay.h log.h uint64.h okclient.h droproot.h maxclient.h
 	./compile dnscache.c
 
 dnsfilter: \
@@ -687,11 +687,16 @@ qlog.o: \
 compile qlog.c buffer.h qlog.h uint16.h
 	./compile qlog.c
 
+qmerge.o: \
+compile qmerge.c qmerge.h dns.h stralloc.h gen_alloc.h iopause.h \
+taia.h tai.h uint64.h log.h maxclient.h
+	./compile qmerge.c
+
 query.o: \
 compile query.c error.h roots.h log.h uint64.h case.h cache.h \
 uint32.h uint64.h byte.h dns.h stralloc.h gen_alloc.h iopause.h \
 taia.h tai.h uint64.h taia.h uint64.h uint32.h uint16.h dd.h alloc.h \
-response.h uint32.h query.h dns.h uint32.h
+response.h uint32.h query.h dns.h uint32.h qmerge.h
 	./compile query.c
 
 random-ip: \
