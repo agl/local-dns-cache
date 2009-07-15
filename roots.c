@@ -103,7 +103,6 @@ static int init1(void)
   DIR *dir;
   int r;
 
-  if (chdir("servers") == -1) return 0;
   dir = opendir(".");
   if (!dir) return 0;
   r = init2(dir);
