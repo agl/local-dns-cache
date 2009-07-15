@@ -8,19 +8,5 @@ static char fn[3 + IP4_FMT];
 
 int okclient(char ip[4])
 {
-  struct stat st;
-  int i;
-
-  fn[0] = 'i';
-  fn[1] = 'p';
-  fn[2] = '/';
-  fn[3 + ip4_fmt(fn + 3,ip)] = 0;
-
-  for (;;) {
-    if (stat(fn,&st) == 0) return 1;
-    /* treat temporary error as rejection */
-    i = str_rchr(fn,'.');
-    if (!fn[i]) return 0;
-    fn[i] = 0;
-  }
+  return ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1;
 }
