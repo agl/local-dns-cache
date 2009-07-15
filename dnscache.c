@@ -1,4 +1,8 @@
 #include <unistd.h>
+#include <getopt.h>
+#include <fcntl.h>
+#include <stdio.h>
+
 #include "env.h"
 #include "exit.h"
 #include "scan.h"
@@ -385,55 +389,133 @@ static void doit(void)
 
 char seed[128];
 
-int main()
+int main(int argc, char **argv)
 {
   char *x;
   unsigned long cachesize;
 
-  x = env_get("IP");
-  if (!x)
-    strerr_die2x(111,FATAL,"$IP not set");
-  if (!ip4_scan(x,myipincoming))
-    strerr_die3x(111,FATAL,"unable to parse IP address ",x);
+  const char *opt_listen_ip = "127.0.0.1",
+             *opt_send_ip = "0.0.0.0",
+             *opt_port = "53",
+             *opt_cache_size = "1000000",
+             *opt_data_limit = "3000000",
+             *opt_config_dir = "/etc/local-dns-cache";
+  char opt_hide_ttl = 0,
+       opt_forward_only = 0;
+
+  static const struct option options[] = {
+    {"listen-ip", 1 /* has argument */, 0, 0},
+    {"send-ip", 1 /* has argument */, 0, 0},
+    {"port", 1 /* has argument */, 0, 0},
+    {"cache-size", 1 /* has argument */, 0, 0},
+    {"config-dir", 1 /* has argument */, 0, 0},
+    /* If you add anything above here, update |num_arguments_with_options|
+     * and |argument_option_values| */
+    {"hide-ttl", 0, 0, 0},
+    {"forward-only", 0, 0, 0},
+
+    {"help", 0, 0, 0},
+    {0, 0, 0, 0},
+  };
+
+  static const unsigned num_arguments_with_options = 5;
+
+  /* This array is parallel to the first |num_arguments_with_options| elements
+   * of |options| and contains the char pointers which will receive the option
+   * arguments */
+  const char **argument_option_values[] = {
+    &opt_listen_ip,
+    &opt_send_ip,
+    &opt_port,
+    &opt_cache_size,
+    &opt_config_dir,
+  };
+
+  /* This array is parallel to the last $arraysize(options) -
+   * num_arguments_with_options$ elements of |options|. It contains pointers to
+   * the bool flags which are set if we see the corresponding argument */
+  char *argument_option_flags[] = {
+    &opt_hide_ttl,
+    &opt_forward_only,
+  };
+
+  for (;;) {
+    int option_index = 0;
+    const int c = getopt_long(argc, argv, "h", options, &option_index);
+
+    if (c == -1)
+      break;
+
+    if (c)
+      strerr_die2x(111,FATAL,"getopt returned unknown value");
+
+    if (c == 'h' || c == 0 && strcmp(options[option_index].name, "help") == 0) {
+      fprintf(stderr, "local-dns-cache:\n\n"
+                      "  --listen-ip: the IP address to listen on (%s)\n"
+                      "  --send-ip: the IP address to send on (%s)\n"
+                      "  --config-dir: the location of the configuration (%s)\n"
+                      "  --port: the port number to bind to (%s)\n"
+                      "  --cache-size: the size (in bytes) of the cache (%s)\n"
+                      "  --hide-ttl: if set, always return a TTL of 0\n"
+                      "  --forward-only: if set, make recursive queries\n",
+              opt_listen_ip, opt_send_ip, opt_config_dir, opt_port,
+              opt_cache_size);
+      return 1;
+    }
+
+    if (option_index < num_arguments_with_options)
+      *argument_option_values[option_index] = optarg;
+    else
+      *argument_option_flags[option_index - num_arguments_with_options] = 1;
+  }
+
+  if (!ip4_scan(opt_listen_ip,myipincoming))
+    strerr_die3x(111,FATAL,"unable to parse IP address ", opt_listen_ip);
+
+  unsigned long port = 0;
+  scan_ulong(opt_port, &port);
+  if (port > 65535 || port == 0)
+    strerr_die3x(111, FATAL, "unable to parse port number ", opt_port);
 
   udp53 = socket_udp();
   if (udp53 == -1)
     strerr_die2sys(111,FATAL,"unable to create UDP socket: ");
-  if (socket_bind4_reuse(udp53,myipincoming,53) == -1)
+  if (socket_bind4_reuse(udp53,myipincoming,port) == -1)
     strerr_die2sys(111,FATAL,"unable to bind UDP socket: ");
 
   tcp53 = socket_tcp();
   if (tcp53 == -1)
     strerr_die2sys(111,FATAL,"unable to create TCP socket: ");
-  if (socket_bind4_reuse(tcp53,myipincoming,53) == -1)
+  if (socket_bind4_reuse(tcp53,myipincoming,port) == -1)
     strerr_die2sys(111,FATAL,"unable to bind TCP socket: ");
 
-  droproot(FATAL);
+  // FIXME(agl): work when run as root
+  // droproot(FATAL);
 
   socket_tryreservein(udp53,131072);
 
-  byte_zero(seed,sizeof seed);
-  read(0,seed,sizeof seed);
+  const int urandomfd = open("/dev/urandom", O_RDONLY);
+  if (urandomfd < 0)
+    strerr_die2sys(111, FATAL, "unable to open /dev/urandom: ");
+  if (read(urandomfd,seed,sizeof seed) != sizeof(seed))
+    strerr_die2sys(111, FATAL, "unable to read /dev/urandom: ");
   dns_random_init(seed);
-  close(0);
+  close(urandomfd);
 
-  x = env_get("IPSEND");
-  if (!x)
-    strerr_die2x(111,FATAL,"$IPSEND not set");
-  if (!ip4_scan(x,myipoutgoing))
-    strerr_die3x(111,FATAL,"unable to parse IP address ",x);
+  if (!ip4_scan(opt_send_ip, myipoutgoing))
+    strerr_die3x(111,FATAL,"unable to parse IP address ", opt_send_ip);
 
-  x = env_get("CACHESIZE");
-  if (!x)
-    strerr_die2x(111,FATAL,"$CACHESIZE not set");
-  scan_ulong(x,&cachesize);
+  scan_ulong(opt_cache_size,&cachesize);
   if (!cache_init(cachesize))
-    strerr_die3x(111,FATAL,"not enough memory for cache of size ",x);
+    strerr_die3x(111,FATAL,"not enough memory for cache of size ", opt_cache_size);
 
-  if (env_get("HIDETTL"))
+  if (opt_hide_ttl)
     response_hidettl();
-  if (env_get("FORWARDONLY"))
+  if (opt_forward_only)
     query_forwardonly();
+
+  if (chdir(opt_config_dir))
+    strerr_die2sys(111, FATAL, "unable to change to config directory: ");
 
   if (!roots_init())
     strerr_die2sys(111,FATAL,"unable to read servers: ");
