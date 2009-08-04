@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 
+#include "dbus.h"
 #include "env.h"
 #include "exit.h"
 #include "scan.h"
@@ -307,8 +308,15 @@ void t_new(void)
   log_tcpopen(x->ip,x->port);
 }
 
+// Exported by dbus.c
+extern int dbus_fd[];
+extern char dbus_fd_read[];
+extern char dbus_fd_write[];
 
-iopause_fd io[3 + MAXUDP + MAXTCP];
+extern void dbus_handle_io(int index, int resulting_events);
+extern void dbus_pre_iopause();
+
+iopause_fd io[3 + MAXUDP + MAXTCP + kMaxWatches];
 iopause_fd *udp53io;
 iopause_fd *tcp53io;
 
@@ -334,6 +342,20 @@ static void doit(void)
     tcp53io = io + iolen++;
     tcp53io->fd = tcp53;
     tcp53io->events = IOPAUSE_READ;
+
+    dbus_pre_iopause();
+    iopause_fd* dbus_ios[kMaxWatches];
+
+    for (unsigned i = 0; i < kMaxWatches; ++i) {
+      if (dbus_fd[i] >= 0 && (dbus_fd_read[i] || dbus_fd_write[i])) {
+        dbus_ios[i] = io + iolen++;
+        dbus_ios[i]->fd = dbus_fd[i];
+        dbus_ios[i]->events = (dbus_fd_read[i] ? IOPAUSE_READ : 0) |
+                              (dbus_fd_write[i] ? IOPAUSE_WRITE : 0);
+      } else {
+        dbus_ios[i] = NULL;
+      }
+    }
 
     for (j = 0;j < MAXUDP;++j)
       if (u[j].active) {
@@ -382,12 +404,19 @@ static void doit(void)
     if (tcp53io)
       if (tcp53io->revents)
 	t_new();
+
+    for (unsigned i = 0; i < kMaxWatches; ++i) {
+      if (dbus_ios[i] && dbus_ios[i]->revents)
+        dbus_handle_io(i, dbus_ios[i]->revents);
+    }
   }
 }
-  
+
 #define FATAL "dnscache: fatal: "
 
 char seed[128];
+
+extern int dbus_init();
 
 int main(int argc, char **argv)
 {
@@ -468,6 +497,9 @@ int main(int argc, char **argv)
     else
       *argument_option_flags[option_index - num_arguments_with_options] = 1;
   }
+
+  if (!dbus_init())
+    strerr_die2x(111,FATAL,"Failed to setup DBUS connection");
 
   if (!ip4_scan(opt_listen_ip,myipincoming))
     strerr_die3x(111,FATAL,"unable to parse IP address ", opt_listen_ip);

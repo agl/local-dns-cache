@@ -4,6 +4,8 @@ AC_PREREQ(2.59)
 
 AC_INIT([local-dns-cache], [0.1], [agl@imperialviolet.org])
 
+PKG_CHECK_MODULES([DBUS], [dbus-1])
+
 AM_INIT_AUTOMAKE([1.9 foreign])
 
 AC_PROG_CC
