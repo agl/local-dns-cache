@@ -1,0 +1,9 @@
+Makefile
+Makefile.in
+*.o
+*.swp
+localdnscache
+config.log
+config.status
+.deps
+autom4te.cache
